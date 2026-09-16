@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Виджет: очередь заказов</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+
+  :root{
+    --void:#0a0712;
+    --glass:rgba(14,9,24,.68);
+    --glass-strong:rgba(20,13,34,.82);
+    --border:rgba(255,255,255,.14);
+    --violet:#8b5cf6;
+    --violet-soft:#c4b0ff;
+    --pink:#ec6cb0;
+    --cyan:#4fd1e8;
+    --text:#f6f3fc;
+    --text-dim:#bcb2d9;
+    --bg:transparent;
+    --success:#4ade80;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; }
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  html, body{
+    width:100%;
+    min-height:100%;
+    background:var(--bg);
+    font-family:'Manrope', sans-serif;
+  }
+
+  body.site-preview{ background:var(--void); min-height:100vh; }
+
+  #stage{
+    width:100%;
+    min-height:100vh;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:40px 20px;
+    overflow:hidden;
+  }
+
+  /* ---------- Фон: аврора ---------- */
+
+  .aurora{
+    position:fixed;
+    inset:0;
+    z-index:0;
+    pointer-events:none;
+    overflow:hidden;
+    display:none;
+  }
+  body.site-preview .aurora{ display:block; }
+
+  .blob{
+    position:absolute;
+    width:520px; height:520px;
+    border-radius:50%;
+    filter:blur(90px);
+    opacity:.35;
+    animation:drift 22s ease-in-out infinite;
+  }
+  .blob.b1{ top:-160px; left:-120px; background:var(--violet); }
+  .blob.b2{ bottom:-180px; right:-140px; background:var(--pink); animation-duration:26s; animation-delay:-6s; }
+  .blob.b3{ top:30%; left:55%; width:380px; height:380px; background:var(--cyan); opacity:.18; animation-duration:30s; animation-delay:-12s; }
+
+  @keyframes drift{
+    0%,100%{ transform:translate(0,0) scale(1); }
+    50%{ transform:translate(40px,-30px) scale(1.08); }
+  }
+
+  /* ---------- Карточка ---------- */
+
+  #wrap{ position:relative; z-index:1; }
+
+  .card{
+    position:relative;
+    width:420px;
+    padding:22px 24px 20px;
+    border-radius:26px;
+    background:linear-gradient(165deg, var(--glass-strong), var(--glass));
+    border:1px solid var(--border);
+    backdrop-filter:blur(28px) saturate(140%);
+    -webkit-backdrop-filter:blur(28px) saturate(140%);
+    box-shadow:0 24px 60px -20px rgba(139,92,246,.4), 0 10px 30px -10px rgba(0,0,0,.65), 0 0 0 1px rgba(0,0,0,.25);
+    isolation:isolate;
+    animation:cardIn .5s cubic-bezier(.2,.8,.2,1);
+  }
+
+  @keyframes cardIn{
+    from{ opacity:0; transform:translateY(10px) scale(.985); }
+    to{ opacity:1; transform:translateY(0) scale(1); }
+  }
+
+  /* мягкий вращающийся ореол за карточкой — тонкий, не отвлекающий */
+  .card::before{
+    content:'';
+    position:absolute;
+    inset:-26%;
+    z-index:-1;
+    border-radius:50%;
+    background:conic-gradient(from 0deg, var(--violet), var(--pink), var(--cyan), var(--violet));
+    filter:blur(46px);
+    opacity:.22;
+    animation:haloSpin 14s linear infinite;
+  }
+
+  @keyframes haloSpin{ to{ transform:rotate(360deg); } }
+
+  /* лёгкий стеклянный блик сверху карточки */
+  .card::after{
+    content:'';
+    position:absolute;
+    inset:0;
+    border-radius:inherit;
+    background:linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,0) 35%);
+    pointer-events:none;
+  }
+
+  /* ---------- Шапка ---------- */
+
+  .head-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:18px;
+  }
+
+  .live-pill{
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    font-size:12px;
+    font-weight:700;
+    color:var(--text);
+  }
+
+  .live-dot{
+    width:7px; height:7px; border-radius:50%;
+    background:linear-gradient(135deg, var(--violet), var(--pink));
+    box-shadow:0 0 0 0 rgba(236,108,176,.55);
+    animation:pulse 2s infinite;
+  }
+
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(236,108,176,.5); }
+    70%{ box-shadow:0 0 0 7px rgba(236,108,176,0); }
+    100%{ box-shadow:0 0 0 0 rgba(236,108,176,0); }
+  }
+
+  .count-pill{
+    display:inline-block;
+    font-size:11.5px;
+    font-weight:700;
+    color:var(--text-dim);
+    background:rgba(255,255,255,.05);
+    border:1px solid var(--border);
+    border-radius:999px;
+    padding:4px 11px;
+    transition:color .2s;
+  }
+
+  .count-pill.bump{ animation:countBump .45s ease; }
+  @keyframes countBump{
+    0%{ transform:scale(1); }
+    40%{ transform:scale(1.16); color:var(--violet-soft); }
+    100%{ transform:scale(1); }
+  }
+
+  /* ---------- Текущий заказ ---------- */
+
+  .current-row{
+    position:relative;
+    display:flex;
+    align-items:center;
+    gap:15px;
+    margin-bottom:18px;
+    padding:8px 10px;
+    margin-left:-10px;
+    margin-right:-10px;
+    border-radius:18px;
+  }
+
+  .current-row::before{
+    content:'';
+    position:absolute;
+    inset:0;
+    z-index:-1;
+    border-radius:18px;
+    background:radial-gradient(120% 140% at 12% 50%, rgba(139,92,246,.22), transparent 65%);
+    animation:breathe 3.4s ease-in-out infinite;
+  }
+
+  @keyframes breathe{
+    0%,100%{ opacity:.55; }
+    50%{ opacity:1; }
+  }
+
+  .current-row.idle::before{ animation:none; opacity:.16; }
+
+  /* всплывающая анимация при смене текущего заказа */
+  .current-row.pop-in{ animation:popIn .5s cubic-bezier(.2,.8,.2,1); }
+  @keyframes popIn{
+    0%{ opacity:0; transform:translateY(-6px) scale(.97); }
+    100%{ opacity:1; transform:translateY(0) scale(1); }
+  }
+
+  .photo-wrap{
+    position:relative;
+    flex:0 0 auto;
+    width:60px; height:60px;
+    border-radius:50%;
+    padding:2.5px;
+    background:conic-gradient(from 180deg, var(--violet), var(--pink), var(--cyan), var(--violet));
+    box-shadow:0 0 18px -4px rgba(139,92,246,.65);
+    transition:box-shadow .3s, background .3s;
+  }
+
+  /* бегущий блик по кольцу аватарки */
+  .photo-wrap::after{
+    content:'';
+    position:absolute;
+    inset:-4px;
+    border-radius:50%;
+    background:conic-gradient(from 0deg, transparent 0deg 300deg, rgba(255,255,255,.95) 335deg, transparent 360deg);
+    animation:ringSweep 3.6s linear infinite;
+    pointer-events:none;
+    transition:opacity .3s;
+  }
+
+  @keyframes ringSweep{ to{ transform:rotate(360deg); } }
+
+  .photo-wrap.empty .photo{ display:none; }
+
+  .photo-wrap.idle{
+    background:rgba(255,255,255,.1);
+    box-shadow:none;
+  }
+  .photo-wrap.idle::after{ opacity:0; }
+
+  .photo-placeholder{
+    display:none;
+    width:100%; height:100%;
+    align-items:center;
+    justify-content:center;
+    border-radius:50%;
+    background:var(--void);
+    color:var(--violet-soft);
+  }
+  .photo-wrap.empty .photo-placeholder{ display:flex; }
+  .photo-wrap.idle .photo-placeholder{ color:var(--text-dim); }
+
+  .photo{
+    width:100%; height:100%;
+    border-radius:50%;
+    object-fit:cover;
+    object-position:50% 22%;
+    display:block;
+    background:#1c1330;
+    border:2.5px solid var(--void);
+  }
+
+  .current-info{ min-width:0; flex:1; }
+
+  .tag{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    font-size:10.5px;
+    font-weight:700;
+    color:var(--violet-soft);
+    background:rgba(139,92,246,.16);
+    border-radius:999px;
+    padding:3px 10px 3px 8px;
+    margin-bottom:7px;
+    transition:color .25s, background .25s;
+  }
+
+  .tag.idle{
+    color:var(--text-dim);
+    background:rgba(255,255,255,.06);
+  }
+  .tag.idle .tag-dot{
+    animation:none;
+    background:var(--text-dim);
+    box-shadow:none;
+  }
+
+  .tag-dot{
+    width:5px; height:5px; border-radius:50%;
+    background:var(--pink);
+    box-shadow:0 0 0 0 rgba(236,108,176,.6);
+    animation:pulse 2s infinite;
+  }
+
+  .current-name{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:21.5px;
+    letter-spacing:-.2px;
+    line-height:1.28;
+    color:var(--text);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .current-sub{
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--text-dim);
+    margin-top:4px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .current-price{
+    position:relative;
+    overflow:hidden;
+    flex:0 0 auto;
+    font-family:'Space Grotesk', sans-serif;
+    font-size:13px;
+    font-weight:700;
+    color:#fff;
+    background:linear-gradient(135deg, var(--violet), var(--pink));
+    border-radius:999px;
+    padding:7px 14px;
+    box-shadow:0 6px 16px -6px rgba(236,108,176,.55);
+  }
+
+  .current-price::after{
+    content:'';
+    position:absolute;
+    top:0; left:-60%;
+    width:40%; height:100%;
+    background:linear-gradient(115deg, transparent, rgba(255,255,255,.6), transparent);
+    animation:priceShine 3.4s ease-in-out infinite;
+  }
+
+  @keyframes priceShine{
+    0%{ left:-60%; }
+    35%{ left:130%; }
+    100%{ left:130%; }
+  }
+
+  /* ---------- Разделитель ---------- */
+
+  .divider-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin:0 0 12px;
+  }
+  .divider-row .line{ flex:1; height:1px; background:linear-gradient(90deg, transparent, var(--border), transparent); }
+  .divider-row .label-pill{
+    font-size:10.5px;
+    font-weight:700;
+    color:var(--text-dim);
+    background:rgba(255,255,255,.05);
+    border:1px solid var(--border);
+    border-radius:999px;
+    padding:4px 11px;
+    white-space:nowrap;
+  }
+
+  /* ---------- Очередь ---------- */
+
+  #queueList{ display:flex; flex-direction:column; gap:1px; }
+
+  .qrow{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:10px 8px;
+    margin:0 -8px;
+    border-radius:12px;
+    border-bottom:1px solid rgba(255,255,255,.05);
+    opacity:0;
+    animation:rowIn .4s ease-out forwards;
+    transition:background .15s;
+  }
+  .qrow:last-child{ border-bottom:none; }
+  .qrow:hover{ background:rgba(255,255,255,.035); }
+
+  .qrow.is-next{
+    background:linear-gradient(90deg, rgba(139,92,246,.12), transparent 75%);
+  }
+  .qrow.is-next .qnode{
+    background:linear-gradient(135deg, var(--violet), var(--pink));
+    box-shadow:0 0 10px -2px rgba(139,92,246,.75);
+  }
+  .qrow.is-next .qnode-inner{ color:#fff; }
+
+  @keyframes rowIn{
+    from{ opacity:0; transform:translateX(-6px); }
+    to{ opacity:var(--depth, 1); transform:translateX(0); }
+  }
+
+  .qnode{
+    flex:0 0 auto;
+    width:24px; height:24px;
+    border-radius:50%;
+    padding:1.5px;
+    background:linear-gradient(135deg, rgba(139,92,246,.75), rgba(236,108,176,.55));
+  }
+
+  .qnode-inner{
+    width:100%; height:100%;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:10.5px;
+    font-weight:700;
+    color:var(--text);
+    background:var(--void);
+  }
+
+  .qinfo{ min-width:0; flex:1; }
+
+  .qname{
+    font-weight:700;
+    font-size:13.5px;
+    line-height:1.35;
+    color:var(--text);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  .qsub{
+    font-size:11px;
+    line-height:1.4;
+    color:var(--text-dim);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  .qprice{
+    flex:0 0 auto;
+    font-size:11.5px;
+    font-weight:700;
+    color:var(--text);
+    background:rgba(255,255,255,.07);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:999px;
+    padding:4px 10px;
+  }
+
+  .qempty{
+    font-size:12.5px;
+    color:var(--text-dim);
+    padding:14px 2px;
+    text-align:center;
+  }
+
+  /* ---------- Панель настроек (не показывается в OBS) ---------- */
+
+  .panel{
+    width:420px;
+    margin:24px auto 0;
+    padding:22px;
+    border-radius:24px;
+    background:linear-gradient(165deg, var(--glass-strong), var(--glass));
+    border:1px solid var(--border);
+    backdrop-filter:blur(28px) saturate(140%);
+    -webkit-backdrop-filter:blur(28px) saturate(140%);
+    font-family:'Manrope', sans-serif;
+    color:var(--text);
+    position:relative;
+    z-index:1;
+  }
+
+  .panel h2{
+    margin:0 0 4px;
+    font-family:'Space Grotesk', sans-serif;
+    font-size:17px;
+    font-weight:700;
+  }
+
+  .panel h3{
+    margin:18px 0 10px;
+    font-family:'Space Grotesk', sans-serif;
+    font-size:14px;
+    font-weight:600;
+    color:var(--violet-soft);
+  }
+
+  .panel p.hint{
+    margin:0 0 8px;
+    font-size:13px;
+    color:var(--text-dim);
+    line-height:1.5;
+  }
+
+  .field{ margin-bottom:12px; }
+
+  .field-note{
+    font-size:11px;
+    line-height:1.5;
+    color:var(--text-dim);
+    margin-top:6px;
+  }
+
+  .field-note-error{ color:var(--pink); }
+
+  .field label{
+    display:block;
+    font-size:11.5px;
+    font-weight:700;
+    color:var(--text-dim);
+    margin-bottom:6px;
+  }
+
+  .field input{
+    width:100%;
+    padding:10px 12px;
+    border-radius:12px;
+    border:1px solid var(--border);
+    background:rgba(0,0,0,.22);
+    color:var(--text);
+    font-family:'Manrope', sans-serif;
+    font-size:14px;
+  }
+
+  .field input:focus{ outline:none; border-color:var(--violet); box-shadow:0 0 0 3px rgba(139,92,246,.18); }
+
+  .row2{ display:flex; gap:10px; }
+  .row2 .field{ flex:1; }
+
+  .queue-editor-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 10px;
+    border-radius:12px;
+    background:rgba(0,0,0,.18);
+    border:1px solid var(--border);
+    margin-bottom:8px;
+  }
+
+  .queue-editor-row .qtexts{ flex:1; min-width:0; display:flex; gap:6px; }
+  .queue-editor-row .qtexts input{
+    width:100%;
+    padding:7px 9px;
+    border-radius:9px;
+    border:1px solid var(--border);
+    background:rgba(0,0,0,.26);
+    color:var(--text);
+    font-family:'Manrope', sans-serif;
+    font-size:12.5px;
+  }
+  .queue-editor-row .qtexts input:focus{ outline:none; border-color:var(--violet); box-shadow:0 0 0 3px rgba(139,92,246,.18); }
+  .queue-editor-row .qtexts input.qe-name{ flex:1.4; font-weight:700; }
+  .queue-editor-row .qtexts input.qe-customer{ flex:1; }
+  .queue-editor-row .qtexts input.qe-price{ flex:0 0 76px; color:var(--pink); }
+  .queue-editor-row .qorder{
+    flex:0 0 auto;
+    font-size:11px;
+    font-weight:700;
+    color:var(--text-dim);
+    width:16px;
+  }
+
+  .sync-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:11px;
+    color:var(--text-dim);
+    margin-bottom:14px;
+  }
+  .sync-dot{
+    width:6px; height:6px; border-radius:50%;
+    background:#4ade80;
+    box-shadow:0 0 6px #4ade80;
+  }
+
+  .icon-btn{
+    flex:0 0 auto;
+    width:26px;
+    height:26px;
+    border-radius:9px;
+    border:1px solid var(--border);
+    background:rgba(255,255,255,.04);
+    color:var(--text-dim);
+    font-size:12px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:0;
+    transition:border-color .15s, color .15s;
+  }
+  .icon-btn:hover{ color:var(--text); border-color:var(--violet); }
+
+  .promote-btn{
+    flex:0 0 auto;
+    width:auto;
+    padding:0 10px;
+    font-size:10.5px;
+    font-weight:700;
+  }
+
+  .actions{ display:flex; gap:10px; margin-top:14px; }
+
+  button{
+    padding:11px 14px;
+    border-radius:12px;
+    border:none;
+    font-family:'Manrope', sans-serif;
+    font-weight:700;
+    font-size:13px;
+    cursor:pointer;
+    transition:filter .15s, background .15s, transform .1s;
+  }
+  button:active{ transform:scale(.98); }
+
+  .actions button{ flex:1; }
+
+  #addBtn{
+    background:linear-gradient(135deg, var(--violet), var(--pink));
+    color:#fff;
+    width:100%;
+    margin-top:4px;
+  }
+  #addBtn:hover{ filter:brightness(1.08); }
+
+  #advanceBtn{
+    background:rgba(139,92,246,.16);
+    color:var(--violet-soft);
+    border:1px solid rgba(139,92,246,.35);
+  }
+  #advanceBtn:hover{ background:rgba(139,92,246,.26); }
+
+  #copyBtn{
+    background:linear-gradient(135deg, var(--violet), var(--pink));
+    color:#fff;
+  }
+  #copyBtn:hover{ filter:brightness(1.08); }
+  #copyBtn.copied{ background:#4ade80; color:#06280f; }
+
+  #bgToggle{
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--text-dim);
+  }
+
+  .link-out{
+    margin-top:12px;
+    font-size:11px;
+    color:var(--text-dim);
+    word-break:break-all;
+    background:rgba(0,0,0,.24);
+    border-radius:10px;
+    padding:8px 10px;
+    display:none;
+  }
+  .link-out.visible{ display:block; }
+</style>
+</head>
+<body class="site-preview">
+
+  <div class="aurora">
+    <span class="blob b1"></span>
+    <span class="blob b2"></span>
+    <span class="blob b3"></span>
+  </div>
+
+  <div id="stage">
+    <div style="display:flex; flex-direction:column; align-items:center;">
+      <div id="wrap">
+        <div class="card">
+          <div class="head-row">
+            <span class="live-pill"><span class="live-dot"></span>Очередь заказов</span>
+            <span class="count-pill" id="queueCount">0 в очереди</span>
+          </div>
+
+          <div class="current-row" id="currentRow">
+            <div class="photo-wrap" id="photoWrap">
+              <img class="photo" id="photo" alt="" referrerpolicy="no-referrer">
+              <div class="photo-placeholder">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="1.6"/>
+                  <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+                  <path d="M21 15l-5-5-9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+            <div class="current-info">
+              <div class="tag" id="currentTag"><span class="tag-dot"></span>В работе</div>
+              <div class="current-name" id="currentName">Пока пусто</div>
+              <div class="current-sub" id="currentSub"></div>
+            </div>
+            <div class="current-price" id="currentPrice" style="display:none;"></div>
+          </div>
+
+          <div class="divider-row">
+            <span class="line"></span>
+            <span class="label-pill">Далее в очереди</span>
+            <span class="line"></span>
+          </div>
+
+          <div id="queueList"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="panel">
+        <h2>Настройка виджета</h2>
+        <div class="sync-badge"><span class="sync-dot"></span><span id="syncLabel">синхронизация: локально в этом браузере</span></div>
+        <p class="hint">Заполни текущий заказ и добавляй новые заказы в очередь — карточка выше обновится сразу. Для OBS Browser Source жми «Скопировать ссылку» при каждом изменении. Если вместо этого открыть виджет вторым окном в обычном браузере и захватывать его окном (Window Capture) — изменения будут появляться сами, без копирования ссылки.</p>
+
+        <h3>Текущий заказ</h3>
+        <div class="field">
+          <label>Ссылка на фото (необязательно)</label>
+          <input type="text" id="cur-photo" placeholder="https://...">
+          <div class="field-note" id="photoNote">Нужна прямая ссылка на файл изображения (заканчивается на .jpg, .png, .webp и т.п.), а не на страницу поста или профиль. Некоторые сайты (например VK, Pinterest) не отдают картинку по прямой ссылке — тогда лучше сохранить фото и загрузить на imgur.com.</div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Название заказа</label>
+            <input type="text" id="cur-name" placeholder="Например: Портрет персонажа">
+          </div>
+          <div class="field">
+            <label>Заказчик</label>
+            <input type="text" id="cur-customer" placeholder="Ник заказчика">
+          </div>
+        </div>
+        <div class="field">
+          <label>Цена (необязательно)</label>
+          <input type="text" id="cur-price" placeholder="Например: 1500 ₽">
+        </div>
+
+        <h3>Очередь</h3>
+        <div id="queueEditor"></div>
+
+        <div class="row2">
+          <div class="field">
+            <label>Название заказа</label>
+            <input type="text" id="new-name" placeholder="Например: Аватарка">
+          </div>
+          <div class="field">
+            <label>Заказчик</label>
+            <input type="text" id="new-customer" placeholder="Ник заказчика">
+          </div>
+          <div class="field" style="max-width:110px;">
+            <label>Цена</label>
+            <input type="text" id="new-price" placeholder="500 ₽">
+          </div>
+        </div>
+        <button id="addBtn">+ Добавить в очередь</button>
+
+        <button id="advanceBtn" style="width:100%; margin-top:14px;">Перейти к следующему заказу</button>
+
+        <div class="actions">
+          <button id="copyBtn">Скопировать ссылку для OBS</button>
+          <button id="bgToggle">Прозрачный фон</button>
+        </div>
+
+        <div class="link-out" id="linkOut"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const STORAGE_KEY = 'order_widget_state_v1';
+
+  function decodeState(str){
+    try{
+      return JSON.parse(decodeURIComponent(escape(atob(str))));
+    }catch(e){
+      return null;
+    }
+  }
+  function encodeState(obj){
+    return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+  }
+  function loadFromStorage(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    }catch(e){ return null; }
+  }
+  function saveToStorage(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+  }
+
+  const fromLink = params.get('d') ? decodeState(params.get('d')) : null;
+  const fromStorage = !fromLink ? loadFromStorage() : null;
+
+  const state = fromLink || fromStorage || {
+    current: { photo:'', name:'', customer:'', price:'' },
+    queue: []
+  };
+  state.queue.forEach(item => { if (item.price === undefined) item.price = ''; });
+  if (state.current.price === undefined) state.current.price = '';
+
+  const els = {
+    currentRow: document.getElementById('currentRow'),
+    photoWrap: document.getElementById('photoWrap'),
+    photo: document.getElementById('photo'),
+    currentName: document.getElementById('currentName'),
+    currentSub: document.getElementById('currentSub'),
+    currentPrice: document.getElementById('currentPrice'),
+    queueList: document.getElementById('queueList'),
+    queueCount: document.getElementById('queueCount'),
+    panel: document.getElementById('panel'),
+    curPhoto: document.getElementById('cur-photo'),
+    photoNote: document.getElementById('photoNote'),
+    curName: document.getElementById('cur-name'),
+    curCustomer: document.getElementById('cur-customer'),
+    curPrice: document.getElementById('cur-price'),
+    queueEditor: document.getElementById('queueEditor'),
+    newName: document.getElementById('new-name'),
+    newCustomer: document.getElementById('new-customer'),
+    newPrice: document.getElementById('new-price'),
+    addBtn: document.getElementById('addBtn'),
+    advanceBtn: document.getElementById('advanceBtn'),
+    copyBtn: document.getElementById('copyBtn'),
+    bgToggle: document.getElementById('bgToggle'),
+    linkOut: document.getElementById('linkOut'),
+    currentTag: document.getElementById('currentTag'),
+  };
+
+  let lastCurrentKey = null;
+  let lastQueueCount = null;
+
+  function render(){
+    // всплывающая анимация при смене текущего заказа
+    const currentKey = JSON.stringify(state.current);
+    if (currentKey !== lastCurrentKey){
+      lastCurrentKey = currentKey;
+      if (els.currentRow){
+        els.currentRow.classList.remove('pop-in');
+        void els.currentRow.offsetWidth; // форсируем reflow, чтобы анимация перезапустилась
+        els.currentRow.classList.add('pop-in');
+      }
+    }
+
+    // текущий заказ
+    const hasCurrent = !!(state.current.name || state.current.photo || state.current.customer);
+
+    if (state.current.photo){
+      els.photoWrap.classList.remove('empty');
+      els.photo.src = state.current.photo;
+    } else {
+      els.photoWrap.classList.add('empty');
+    }
+    els.photoWrap.classList.toggle('idle', !hasCurrent);
+    if (els.currentRow) els.currentRow.classList.toggle('idle', !hasCurrent);
+    if (els.currentTag){
+      els.currentTag.classList.toggle('idle', !hasCurrent);
+      els.currentTag.innerHTML = '<span class="tag-dot"></span>' + (hasCurrent ? 'В работе' : 'Ожидание');
+    }
+
+    els.currentName.textContent = state.current.name || 'Пока пусто';
+    els.currentSub.textContent = state.current.customer ? ('Заказчик: ' + state.current.customer) : '';
+    if (state.current.price){
+      els.currentPrice.textContent = state.current.price;
+      els.currentPrice.style.display = '';
+    } else {
+      els.currentPrice.style.display = 'none';
+    }
+
+    if (lastQueueCount !== null && lastQueueCount !== state.queue.length){
+      els.queueCount.classList.remove('bump');
+      void els.queueCount.offsetWidth;
+      els.queueCount.classList.add('bump');
+    }
+    lastQueueCount = state.queue.length;
+    els.queueCount.textContent = state.queue.length + ' в очереди';
+
+    // очередь — сама карточка
+    if (state.queue.length === 0){
+      els.queueList.innerHTML = '<div class="qempty">Очередь пуста — самое время закинуть новый заказ</div>';
+    } else {
+      els.queueList.innerHTML = state.queue.map((item, i) => {
+        const depth = Math.max(1 - i * 0.06, 0.55).toFixed(2);
+        return `
+        <div class="qrow${i === 0 ? ' is-next' : ''}" style="animation-delay:${Math.min(i * 55, 400)}ms; --depth:${depth}">
+          <div class="qnode"><div class="qnode-inner">${i + 1}</div></div>
+          <div class="qinfo">
+            <div class="qname">${escapeHtml(item.name || 'Без названия')}</div>
+            ${item.customer ? `<div class="qsub">${escapeHtml(item.customer)}</div>` : ''}
+          </div>
+          ${item.price ? `<div class="qprice">${escapeHtml(item.price)}</div>` : ''}
+        </div>
+      `;
+      }).join('');
+    }
+  }
+
+  function renderEditor(){
+    if (state.queue.length === 0){
+      els.queueEditor.innerHTML = '<p class="hint" style="margin:0 0 10px;">Очередь пока пуста.</p>';
+      return;
+    }
+    els.queueEditor.innerHTML = state.queue.map((item, i) => `
+      <div class="queue-editor-row">
+        <div class="qorder">${i + 1}.</div>
+        <div class="qtexts">
+          <input class="qe-name" data-field="name" data-i="${i}" value="${escapeAttr(item.name)}" placeholder="Название">
+          <input class="qe-customer" data-field="customer" data-i="${i}" value="${escapeAttr(item.customer)}" placeholder="Заказчик">
+          <input class="qe-price" data-field="price" data-i="${i}" value="${escapeAttr(item.price)}" placeholder="Цена">
+        </div>
+        <button class="icon-btn" data-action="up" data-i="${i}" title="Выше">↑</button>
+        <button class="icon-btn" data-action="down" data-i="${i}" title="Ниже">↓</button>
+        <button class="icon-btn promote-btn" data-action="promote" data-i="${i}" title="Сделать текущим">Начать</button>
+        <button class="icon-btn" data-action="remove" data-i="${i}" title="Удалить">✕</button>
+      </div>
+    `).join('');
+
+    els.queueEditor.querySelectorAll('input[data-field]').forEach(input => {
+      input.addEventListener('input', () => {
+        const i = parseInt(input.getAttribute('data-i'), 10);
+        const field = input.getAttribute('data-field');
+        state.queue[i][field] = input.value;
+        render();
+        saveToStorage();
+      });
+    });
+
+    els.queueEditor.querySelectorAll('button[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = parseInt(btn.getAttribute('data-i'), 10);
+        const action = btn.getAttribute('data-action');
+        if (action === 'up' && i > 0){
+          [state.queue[i-1], state.queue[i]] = [state.queue[i], state.queue[i-1]];
+        } else if (action === 'down' && i < state.queue.length - 1){
+          [state.queue[i+1], state.queue[i]] = [state.queue[i], state.queue[i+1]];
+        } else if (action === 'promote'){
+          state.current = { photo:'', name: state.queue[i].name, customer: state.queue[i].customer, price: state.queue[i].price };
+          state.queue.splice(i, 1);
+          els.curPhoto.value = '';
+          els.curName.value = state.current.name;
+          els.curCustomer.value = state.current.customer;
+          els.curPrice.value = state.current.price;
+        } else if (action === 'remove'){
+          state.queue.splice(i, 1);
+        }
+        renderEditor();
+        render();
+        saveToStorage();
+      });
+    });
+  }
+
+  const photoNoteDefault = els.photoNote ? els.photoNote.textContent : '';
+  const photoNoteError = 'Не получилось загрузить фото по этой ссылке. Проверь, что это прямая ссылка на файл изображения (не на страницу поста), либо загрузи фото на imgur.com и вставь ссылку оттуда.';
+
+  els.photo.addEventListener('error', () => {
+    if (!state.current.photo) return;
+    els.photoWrap.classList.add('empty');
+    if (els.photoNote){
+      els.photoNote.textContent = photoNoteError;
+      els.photoNote.classList.add('field-note-error');
+    }
+  });
+
+  els.photo.addEventListener('load', () => {
+    els.photoWrap.classList.remove('empty');
+    if (els.photoNote){
+      els.photoNote.textContent = photoNoteDefault;
+      els.photoNote.classList.remove('field-note-error');
+    }
+  });
+
+  function escapeAttr(str){
+    return (str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  }
+
+  function escapeHtml(str){
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  if (params.get('obs') === '1'){
+    els.panel.style.display = 'none';
+    document.body.classList.remove('site-preview');
+  } else {
+    els.curPhoto.value = state.current.photo || '';
+    els.curName.value = state.current.name || '';
+    els.curCustomer.value = state.current.customer || '';
+    els.curPrice.value = state.current.price || '';
+
+    els.curPhoto.addEventListener('input', () => { state.current.photo = els.curPhoto.value; render(); saveToStorage(); });
+    els.curName.addEventListener('input', () => { state.current.name = els.curName.value; render(); saveToStorage(); });
+    els.curCustomer.addEventListener('input', () => { state.current.customer = els.curCustomer.value; render(); saveToStorage(); });
+    els.curPrice.addEventListener('input', () => { state.current.price = els.curPrice.value; render(); saveToStorage(); });
+
+    function addQueueItem(){
+      if (!els.newName.value.trim()) return;
+      state.queue.push({
+        name: els.newName.value.trim(),
+        customer: els.newCustomer.value.trim(),
+        price: els.newPrice.value.trim(),
+      });
+      els.newName.value = '';
+      els.newCustomer.value = '';
+      els.newPrice.value = '';
+      els.newName.focus();
+      renderEditor();
+      render();
+      saveToStorage();
+    }
+
+    els.addBtn.addEventListener('click', addQueueItem);
+    [els.newName, els.newCustomer, els.newPrice].forEach(input => {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') addQueueItem();
+      });
+    });
+
+    els.advanceBtn.addEventListener('click', () => {
+      const next = state.queue.shift();
+      state.current = next
+        ? { photo:'', name: next.name, customer: next.customer, price: next.price }
+        : { photo:'', name:'', customer:'', price:'' };
+      els.curPhoto.value = '';
+      els.curName.value = state.current.name;
+      els.curCustomer.value = state.current.customer;
+      els.curPrice.value = state.current.price;
+      renderEditor();
+      render();
+      saveToStorage();
+    });
+
+    els.copyBtn.addEventListener('click', () => {
+      const url = new URL(location.href);
+      url.search = '';
+      const p = new URLSearchParams();
+      p.set('obs', '1');
+      p.set('d', encodeState(state));
+      const finalUrl = url.toString() + '?' + p.toString();
+
+      navigator.clipboard.writeText(finalUrl).catch(() => {});
+      els.linkOut.textContent = finalUrl;
+      els.linkOut.classList.add('visible');
+      els.copyBtn.textContent = 'Скопировано!';
+      els.copyBtn.classList.add('copied');
+      setTimeout(() => {
+        els.copyBtn.textContent = 'Скопировать ссылку для OBS';
+        els.copyBtn.classList.remove('copied');
+      }, 1800);
+    });
+
+    let transparentMode = false;
+    els.bgToggle.addEventListener('click', () => {
+      transparentMode = !transparentMode;
+      document.body.classList.toggle('site-preview', !transparentMode);
+      els.bgToggle.textContent = transparentMode ? 'Тёмный фон' : 'Прозрачный фон';
+    });
+
+    renderEditor();
+  }
+
+  window.addEventListener('storage', (e) => {
+    if (e.key !== STORAGE_KEY || !e.newValue) return;
+    try{
+      const incoming = JSON.parse(e.newValue);
+      state.current = incoming.current;
+      state.queue = incoming.queue;
+      render();
+      if (els.panel.style.display !== 'none'){
+        els.curPhoto.value = state.current.photo || '';
+        els.curName.value = state.current.name || '';
+        els.curCustomer.value = state.current.customer || '';
+        els.curPrice.value = state.current.price || '';
+        renderEditor();
+      }
+    }catch(err){}
+  });
+
+  render();
+  saveToStorage();
+</script>
+</body>
+</html>
